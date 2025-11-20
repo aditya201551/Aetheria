@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Sky, SoftShadows, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -8,6 +8,8 @@ import { generateLore, generateLandmarkName } from './services/geminiService';
 import { PlayerController, Controls } from './components/Player';
 import { Terrain, WorldObjects } from './components/World';
 import { UIOverlay } from './components/UIOverlay';
+import { useMultiplayer } from './hooks/useMultiplayer';
+import { RemotePlayer } from './components/RemotePlayer';
 
 // Initial POI setup
 const INITIAL_POIS: PointOfInterest[] = [
@@ -17,9 +19,6 @@ const INITIAL_POIS: PointOfInterest[] = [
   { id: '4', position: [-15, 0, -15], type: 'tree', name: 'Elder Tree', isDiscovered: false },
 ];
 
-// Logic wrapper to handle key press inside Canvas context if needed, 
-// or we just do it in the main component via event listener or checking state.
-// Since useKeyboardControls is a hook, we can use it in a sub-component.
 const GameLogic: React.FC<{ onInteract: () => void }> = ({ onInteract }) => {
   const [sub] = useKeyboardControls<Controls>();
   
@@ -44,6 +43,9 @@ const App: React.FC = () => {
 
   const [isLocked, setIsLocked] = useState(false);
 
+  // Multiplayer Hook
+  const { otherPlayers, updateMyPosition } = useMultiplayer();
+
   // Initialize POI names with AI on load
   useEffect(() => {
     const initNames = async () => {
@@ -56,35 +58,34 @@ const App: React.FC = () => {
     initNames();
   }, []);
 
-  const handlePlayerMove = useCallback((playerPos: THREE.Vector3) => {
+  const handlePlayerMove = useCallback((playerPos: THREE.Vector3, rotation: number) => {
+    // Send update to server
+    updateMyPosition(playerPos, rotation);
+
     let found: PointOfInterest | null = null;
     
-    // Simple proximity check
+    // Simple proximity check for POIs
     for (const poi of gameState.pois) {
       const poiPos = new THREE.Vector3(...poi.position);
-      // Ignore Y for distance check, just horizontal distance
       const dist = Math.sqrt(Math.pow(playerPos.x - poiPos.x, 2) + Math.pow(playerPos.z - poiPos.z, 2));
       
-      if (dist < 8) { // Interaction radius
+      if (dist < 8) { 
         found = poi;
         break;
       }
     }
 
-    // Only update if the nearby POI has changed
     setGameState(prev => {
         if (prev.nearbyPoi?.id === found?.id) return prev;
         return { ...prev, nearbyPoi: found };
     });
-  }, [gameState.pois]);
+  }, [gameState.pois, updateMyPosition]);
 
   const handleInteract = useCallback(async () => {
     setGameState(current => {
         const poi = current.nearbyPoi;
         if (!poi || poi.description || current.isGeneratingLore) return current;
 
-        // Start generation
-        // We need to trigger the async process but return the state update immediately
         generateLore(poi.name, poi.type).then(description => {
              setGameState(prev => {
                 const updatedPois = prev.pois.map(p => 
@@ -133,8 +134,14 @@ const App: React.FC = () => {
 
           <Terrain />
           <WorldObjects pois={gameState.pois} />
+          
+          {/* Render Other Players */}
+          {Object.values(otherPlayers).map(player => (
+            <RemotePlayer key={player.id} data={player} />
+          ))}
+
           <PlayerController 
-            onPositionChange={handlePlayerMove} 
+            onMove={handlePlayerMove} 
             onLock={() => setIsLocked(true)}
             onUnlock={() => setIsLocked(false)}
           />

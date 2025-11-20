@@ -17,3 +17,9 @@ export enum LoreType {
   DISCOVERY = 'DISCOVERY',
   AMBIENT = 'AMBIENT'
 }
+
+export interface RemotePlayer {
+  id: string;
+  position: [number, number, number];
+  rotation: number;
+}
