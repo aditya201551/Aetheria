@@ -23,3 +23,9 @@ export interface RemotePlayer {
   position: [number, number, number];
   rotation: number;
 }
+
+// Mutable ref type for performance (avoiding react re-renders on every frame tick)
+export interface TimeContextType {
+  timeRef: React.MutableRefObject<number>; // 0 to 1 (0 = dawn, 0.25 = noon, 0.5 = dusk, 0.75 = midnight)
+  isNight: () => boolean;
+}

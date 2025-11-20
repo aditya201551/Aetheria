@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -16,40 +17,46 @@ interface PlayerProps {
   onMove: (pos: THREE.Vector3, rotation: number) => void;
   onLock: () => void;
   onUnlock: () => void;
+  onLookAt: (id: string | null) => void;
 }
 
-export const PlayerController: React.FC<PlayerProps> = ({ onMove, onLock, onUnlock }) => {
+export const PlayerController: React.FC<PlayerProps> = ({ onMove, onLock, onUnlock, onLookAt }) => {
   const groupRef = useRef<THREE.Group>(null);
   const characterRef = useRef<THREE.Group>(null);
   const { camera, scene } = useThree();
   const [, get] = useKeyboardControls<Controls>();
   
   // Raycaster for terrain height detection
-  const raycaster = useRef(new THREE.Raycaster());
+  const heightRaycaster = useRef(new THREE.Raycaster());
   const downVector = useRef(new THREE.Vector3(0, -1, 0));
+  
+  // Raycaster for interaction (Look at)
+  const interactionRaycaster = useRef(new THREE.Raycaster());
+  const centerVector = useRef(new THREE.Vector2(0, 0)); // Center of screen
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
 
-    // 1. Terrain Height Detection
+    // --- 1. Terrain Height Detection ---
     const rayOrigin = groupRef.current.position.clone();
     rayOrigin.y = 50;
     
-    raycaster.current.set(rayOrigin, downVector.current);
+    heightRaycaster.current.set(rayOrigin, downVector.current);
     
     const terrain = scene.getObjectByName('terrain');
     let targetY = 0;
     
     if (terrain) {
-      const intersects = raycaster.current.intersectObject(terrain);
+      const intersects = heightRaycaster.current.intersectObject(terrain);
       if (intersects.length > 0) {
         targetY = intersects[0].point.y;
       }
     }
 
-    groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, targetY, 10 * delta);
+    // Increased Lerp speed (20) to keep player grounded on slopes and prevent visual jitter
+    groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, targetY, 20 * delta);
 
-    // 2. Movement
+    // --- 2. Movement ---
     const { forward, backward, left, right, sprint } = get();
     const speed = sprint ? 12 : 6;
     
@@ -99,7 +106,7 @@ export const PlayerController: React.FC<PlayerProps> = ({ onMove, onLock, onUnlo
     // Broadcast move
     onMove(groupRef.current.position.clone(), currentRotation);
 
-    // 3. Camera
+    // --- 3. Camera Follow ---
     const cameraTargetPos = groupRef.current.position.clone().add(new THREE.Vector3(0, 2.5, 0));
     state.camera.position.copy(cameraTargetPos);
     
@@ -107,11 +114,37 @@ export const PlayerController: React.FC<PlayerProps> = ({ onMove, onLock, onUnlo
     state.camera.getWorldDirection(viewDir);
     viewDir.multiplyScalar(-5);
     state.camera.position.add(viewDir);
+
+    // --- 4. Interaction Raycast ---
+    interactionRaycaster.current.setFromCamera(centerVector.current, state.camera);
+    // We only care about POI objects. In a complex scene, we might want to maintain a specific array of interactables.
+    // But traversing the scene for objects with specific userData is okay for this scale.
+    const intersects = interactionRaycaster.current.intersectObjects(scene.children, true);
+    
+    let foundId: string | null = null;
+    for (let i = 0; i < intersects.length; i++) {
+        // Check distance (must be relatively close to interact via look-at)
+        if (intersects[i].distance > 15) continue;
+
+        const obj = intersects[i].object;
+        // Traverse up to find the group with userData
+        let curr: THREE.Object3D | null = obj;
+        while (curr) {
+            if (curr.userData && curr.userData.isPoi) {
+                foundId = curr.userData.id;
+                break;
+            }
+            curr = curr.parent;
+        }
+        if (foundId) break;
+    }
+    onLookAt(foundId);
   });
 
   return (
     <>
       <PointerLockControls 
+        makeDefault
         onLock={onLock} 
         onUnlock={onUnlock}
       />

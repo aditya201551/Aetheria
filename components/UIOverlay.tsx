@@ -1,109 +1,136 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import { PointOfInterest } from '../types';
-import { Loader2, Compass, ScrollText, MousePointerClick, Keyboard } from 'lucide-react';
+import { Loader2, Compass, ScrollText, MousePointerClick, X } from 'lucide-react';
 
 interface UIOverlayProps {
   nearbyPoi: PointOfInterest | null;
   isGenerating: boolean;
   onInteract: () => void;
   isLocked: boolean;
+  showLore: boolean;
+  onCloseLore: () => void;
+  isHoveringInteractable: boolean;
 }
 
-export const UIOverlay: React.FC<UIOverlayProps> = ({ nearbyPoi, isGenerating, onInteract, isLocked }) => {
+export const UIOverlay: React.FC<UIOverlayProps> = ({ 
+  nearbyPoi, 
+  isGenerating, 
+  onInteract, 
+  isLocked, 
+  showLore,
+  onCloseLore,
+  isHoveringInteractable
+}) => {
+  const [isHoveringTop, setIsHoveringTop] = useState(false);
+
   return (
-    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6 z-10">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div className="bg-black/40 backdrop-blur-md p-4 rounded-xl border border-white/10 text-white shadow-lg">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-300 via-blue-300 to-purple-400 bg-clip-text text-transparent">
-            Aetheria
-          </h1>
-          <p className="text-sm text-gray-300 flex items-center gap-2 mt-1">
-            <Compass size={14} className="text-cyan-400" /> Exploring the Low Poly Realms
-          </p>
-        </div>
-        
-        <div className="bg-black/40 backdrop-blur-md p-4 rounded-xl border border-white/10 text-white max-w-xs shadow-lg">
-          <p className="text-xs text-gray-400 uppercase tracking-wider font-bold mb-2">Travel Guide</p>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm font-mono text-gray-200">
-            <span className="opacity-70">WASD</span> <span>Move</span>
-            <span className="opacity-70">Mouse</span> <span>Look</span>
-            <span className="opacity-70">Shift</span> <span>Sprint</span>
-            <span className="opacity-70">E</span> <span>Interact</span>
-          </div>
+    <div className="absolute inset-0 pointer-events-none flex flex-col justify-between z-10 overflow-hidden">
+      
+      {/* --- Top Bar (Small Header -> Expands on Hover) --- */}
+      <div 
+        className={`absolute top-0 left-0 right-0 z-20 flex flex-col items-center transition-all duration-500 pointer-events-auto ${isHoveringTop ? 'h-32 bg-gradient-to-b from-black/90 to-transparent' : 'h-6'}`}
+        onMouseEnter={() => setIsHoveringTop(true)}
+        onMouseLeave={() => setIsHoveringTop(false)}
+      >
+        {/* Small visible handle/indicator */}
+        <div className={`w-32 h-1 bg-white/20 rounded-full mt-2 transition-opacity duration-300 ${isHoveringTop ? 'opacity-0' : 'opacity-100'}`} />
+
+        {/* Expanded Content */}
+        <div className={`w-full flex justify-between items-start p-6 transition-all duration-500 ${isHoveringTop ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
+            <div className="text-white">
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-300 via-blue-300 to-purple-400 bg-clip-text text-transparent">
+                Aetheria
+                </h1>
+                <p className="text-xs text-gray-300 flex items-center gap-2 mt-1">
+                <Compass size={12} className="text-cyan-400" /> Exploring the Low Poly Realms
+                </p>
+            </div>
+            
+            <div className="text-white text-right">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono text-gray-300">
+                <span className="opacity-60">WASD</span> <span>Move</span>
+                <span className="opacity-60">Shift</span> <span>Sprint</span>
+                <span className="opacity-60">E</span> <span>Interact</span>
+                </div>
+            </div>
         </div>
       </div>
 
-      {/* Center Click to Start Prompt */}
+      {/* --- Center Screen Elements --- */}
+
+      {/* Crosshair */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-200">
+         <div className={`rounded-full transition-all duration-300 ${isHoveringInteractable ? 'w-3 h-3 bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.8)]' : 'w-1.5 h-1.5 bg-white/50'}`} />
+      </div>
+
+      {/* "Click to Start" Prompt */}
       {!isLocked && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
-           <div className="bg-black/60 backdrop-blur-lg border border-white/20 p-6 rounded-2xl text-white text-center shadow-2xl animate-pulse">
-              <MousePointerClick className="mx-auto mb-3 text-cyan-400" size={32} />
-              <h3 className="text-xl font-bold mb-1">Click to Explore</h3>
-              <p className="text-sm text-gray-300">Click anywhere to lock your mouse and enter the world</p>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] pointer-events-none z-50">
+           <div className="text-white text-center animate-pulse">
+              <MousePointerClick className="mx-auto mb-2 text-cyan-400/80" size={40} />
+              <h3 className="text-2xl font-light tracking-widest uppercase">Click to Explore</h3>
            </div>
         </div>
       )}
 
-      {/* Interaction Area */}
-      <div className="flex flex-col items-center gap-4 mb-10">
-        {nearbyPoi && (
-          <div className="pointer-events-auto animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col items-center">
-            
-            {/* Interaction Prompt */}
-            {!nearbyPoi.isDiscovered && !nearbyPoi.description && (
-              <div className="flex flex-col items-center gap-2">
-                {isLocked ? (
-                  <div className="bg-black/70 backdrop-blur-md border border-cyan-500/50 px-6 py-3 rounded-full text-white font-medium flex items-center gap-3 shadow-[0_0_20px_rgba(6,182,212,0.3)]">
-                     <Keyboard className="text-cyan-400" />
-                     <span>Press <span className="font-bold text-cyan-300 text-lg mx-1">E</span> to Inspect {nearbyPoi.name}</span>
-                  </div>
-                ) : (
-                  <button
-                    onClick={onInteract}
-                    disabled={isGenerating}
-                    className="group relative bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/30 px-8 py-4 rounded-full text-white font-medium transition-all duration-300 hover:scale-105 hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="animate-spin" /> Listening to the spirits...
-                      </>
-                    ) : (
-                      <>
-                        <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                        Inspect {nearbyPoi.name}
-                      </>
-                    )}
-                  </button>
-                )}
-                
-                {isGenerating && (
-                   <div className="bg-black/70 backdrop-blur-md px-4 py-2 rounded-full text-cyan-300 text-sm flex items-center gap-2">
-                     <Loader2 className="animate-spin w-4 h-4" /> Unveiling ancient secrets...
-                   </div>
-                )}
+      {/* Interaction Prompt (Only if looking at interactable) */}
+      <div className="absolute bottom-32 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 pointer-events-none transition-all duration-300">
+        {nearbyPoi && isHoveringInteractable && !showLore && !isGenerating && (
+          <div className={`animate-in fade-in zoom-in duration-300 ${isLocked ? 'opacity-100' : 'opacity-0'}`}>
+              <div className="bg-black/40 backdrop-blur-sm border border-white/10 px-4 py-1.5 rounded-full text-white/90 text-sm font-light flex items-center gap-3 shadow-lg">
+                 <div className="bg-white/20 rounded px-1.5 py-0.5 font-mono text-xs">E</div>
+                 <span>{nearbyPoi.isDiscovered ? 'View' : 'Inspect'} {nearbyPoi.name}</span>
               </div>
-            )}
+          </div>
+        )}
+        
+        {isGenerating && (
+           <div className="bg-black/60 backdrop-blur-md px-5 py-2 rounded-full text-cyan-300 text-xs tracking-wide flex items-center gap-2 border border-cyan-500/20 shadow-lg">
+             <Loader2 className="animate-spin w-4 h-4" /> 
+             <span>Listening...</span>
+           </div>
+        )}
+      </div>
 
-            {/* Lore Card */}
-            {(nearbyPoi.description) && (
-              <div className="max-w-xl bg-black/70 backdrop-blur-xl border border-white/10 p-8 rounded-2xl text-center shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50" />
+      {/* --- Bottom Right Lore Panel --- */}
+      <div className="absolute bottom-8 right-8 pointer-events-auto z-20 w-full max-w-md px-4">
+        {showLore && nearbyPoi && (
+          <div className="relative animate-in slide-in-from-right-4 fade-in duration-500">
+             {/* Card Container */}
+            <div className="bg-black/70 backdrop-blur-xl border border-white/10 rounded-xl p-6 text-left shadow-2xl relative overflow-hidden">
                 
-                <div className="flex justify-center mb-4 text-purple-300">
-                  <ScrollText size={40} className="drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]" />
+                {/* Decorative Gradient Line */}
+                <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent" />
+                
+                {/* Close Button */}
+                <button 
+                  onClick={onCloseLore}
+                  className="absolute top-3 right-3 text-white/30 hover:text-white hover:bg-white/10 p-1 rounded-full transition-all"
+                >
+                  <X size={16} />
+                </button>
+
+                {/* Content */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 text-purple-300/70">
+                    <ScrollText size={16} />
+                    <span className="text-[10px] uppercase tracking-[0.2em] font-bold">Lore Discovered</span>
+                  </div>
+                  
+                  <h2 className="text-xl font-serif text-white tracking-wide">
+                    {nearbyPoi.name}
+                  </h2>
+                  
+                  <p className="text-sm text-gray-300 font-light leading-relaxed max-h-[40vh] overflow-y-auto custom-scrollbar">
+                    "{nearbyPoi.description}"
+                  </p>
+                  
+                  <div className="text-[10px] text-gray-600 mt-2 text-right">
+                    Press <span className="font-mono text-gray-400">E</span> to close
+                  </div>
                 </div>
-                <h2 className="text-3xl font-serif text-white mb-4 tracking-wide">{nearbyPoi.name}</h2>
-                <p className="text-lg text-gray-200 font-light italic leading-relaxed">
-                  "{nearbyPoi.description}"
-                </p>
-                <div className="mt-6 text-xs text-cyan-400 uppercase tracking-widest opacity-70 flex items-center justify-center gap-2">
-                  <span className="w-8 h-[1px] bg-cyan-500/50"></span>
-                  Lore Discovered
-                  <span className="w-8 h-[1px] bg-cyan-500/50"></span>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
       </div>

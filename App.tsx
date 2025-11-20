@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Sky, SoftShadows, KeyboardControls, useKeyboardControls } from '@react-three/drei';
+import { SoftShadows, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { PointOfInterest, GameState } from './types';
 import { COLORS } from './constants';
@@ -10,6 +11,7 @@ import { Terrain, WorldObjects } from './components/World';
 import { UIOverlay } from './components/UIOverlay';
 import { useMultiplayer } from './hooks/useMultiplayer';
 import { RemotePlayer } from './components/RemotePlayer';
+import { PlanetarySystem } from './components/PlanetarySystem';
 
 // Initial POI setup
 const INITIAL_POIS: PointOfInterest[] = [
@@ -41,7 +43,9 @@ const App: React.FC = () => {
     pois: INITIAL_POIS,
   });
 
+  const [showLore, setShowLore] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const [hoveredPoiId, setHoveredPoiId] = useState<string | null>(null);
 
   // Multiplayer Hook
   const { otherPlayers, updateMyPosition } = useMultiplayer();
@@ -58,18 +62,24 @@ const App: React.FC = () => {
     initNames();
   }, []);
 
+  // Close Lore panel if player walks away from the current POI
+  useEffect(() => {
+    if (!gameState.nearbyPoi) {
+      setShowLore(false);
+    }
+  }, [gameState.nearbyPoi?.id]);
+
   const handlePlayerMove = useCallback((playerPos: THREE.Vector3, rotation: number) => {
-    // Send update to server
     updateMyPosition(playerPos, rotation);
 
     let found: PointOfInterest | null = null;
     
-    // Simple proximity check for POIs
+    // Simple proximity check for POIs (distance < 12)
     for (const poi of gameState.pois) {
       const poiPos = new THREE.Vector3(...poi.position);
       const dist = Math.sqrt(Math.pow(playerPos.x - poiPos.x, 2) + Math.pow(playerPos.z - poiPos.z, 2));
       
-      if (dist < 8) { 
+      if (dist < 12) { 
         found = poi;
         break;
       }
@@ -81,16 +91,37 @@ const App: React.FC = () => {
     });
   }, [gameState.pois, updateMyPosition]);
 
+  const handleLookAt = useCallback((id: string | null) => {
+     setHoveredPoiId(id);
+  }, []);
+
   const handleInteract = useCallback(async () => {
     setGameState(current => {
         const poi = current.nearbyPoi;
-        if (!poi || poi.description || current.isGeneratingLore) return current;
+        
+        // Interaction condition: Must be nearby AND looking at the object
+        // Exception: If the lore box is already open, pressing E usually closes it, handled by UIOverlay.
+        // But for triggering NEW interaction, we need focus.
+        if (!poi) return current;
+        if (hoveredPoiId !== poi.id) return current;
 
+        // If already discovered, just toggle the UI visibility
+        if (poi.isDiscovered) {
+            setShowLore(prev => !prev);
+            return current;
+        }
+
+        // If currently generating, ignore
+        if (current.isGeneratingLore) return current;
+
+        // Start Generation
         generateLore(poi.name, poi.type).then(description => {
              setGameState(prev => {
                 const updatedPois = prev.pois.map(p => 
                     p.id === poi.id ? { ...p, description, isDiscovered: true } : p
                 );
+                // Auto-show lore once generated
+                setShowLore(true);
                 return {
                     ...prev,
                     pois: updatedPois,
@@ -102,7 +133,7 @@ const App: React.FC = () => {
 
         return { ...current, isGeneratingLore: true };
     });
-  }, []);
+  }, [hoveredPoiId]);
 
   return (
     <div className="w-full h-screen bg-gray-900 font-sans selection:bg-cyan-500 selection:text-white">
@@ -117,36 +148,26 @@ const App: React.FC = () => {
         ]}
       >
         <Canvas shadows camera={{ position: [0, 5, 10], fov: 60 }}>
-          <fog attach="fog" args={[COLORS.fog, 10, 60]} />
-          <Sky sunPosition={[100, 20, 100]} turbidity={8} rayleigh={0.5} mieCoefficient={0.005} mieDirectionalG={0.8} />
-          <ambientLight intensity={0.6} />
-          <directionalLight
-            castShadow
-            position={[20, 30, 10]}
-            intensity={1.5}
-            shadow-mapSize={[2048, 2048]}
-            shadow-bias={-0.0001}
-          >
-            <orthographicCamera attach="shadow-camera" args={[-50, 50, 50, -50]} />
-          </directionalLight>
-          
-          <SoftShadows size={15} focus={0.5} samples={10} />
+          <PlanetarySystem>
+              <fog attach="fog" args={[COLORS.fog, 10, 60]} />
+              <SoftShadows size={15} focus={0.5} samples={10} />
 
-          <Terrain />
-          <WorldObjects pois={gameState.pois} />
-          
-          {/* Render Other Players */}
-          {Object.values(otherPlayers).map(player => (
-            <RemotePlayer key={player.id} data={player} />
-          ))}
+              <Terrain />
+              <WorldObjects pois={gameState.pois} />
+              
+              {Object.values(otherPlayers).map(player => (
+                <RemotePlayer key={player.id} data={player} />
+              ))}
 
-          <PlayerController 
-            onMove={handlePlayerMove} 
-            onLock={() => setIsLocked(true)}
-            onUnlock={() => setIsLocked(false)}
-          />
-          
-          <GameLogic onInteract={handleInteract} />
+              <PlayerController 
+                onMove={handlePlayerMove} 
+                onLock={() => setIsLocked(true)}
+                onUnlock={() => setIsLocked(false)}
+                onLookAt={handleLookAt}
+              />
+              
+              <GameLogic onInteract={handleInteract} />
+          </PlanetarySystem>
         </Canvas>
         
         <UIOverlay 
@@ -154,6 +175,9 @@ const App: React.FC = () => {
           isGenerating={gameState.isGeneratingLore}
           onInteract={handleInteract}
           isLocked={isLocked}
+          showLore={showLore}
+          onCloseLore={() => setShowLore(false)}
+          isHoveringInteractable={gameState.nearbyPoi?.id === hoveredPoiId}
         />
       </KeyboardControls>
     </div>
