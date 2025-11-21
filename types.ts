@@ -1,3 +1,5 @@
+import React from 'react';
+
 export interface PointOfInterest {
   id: string;
   position: [number, number, number];

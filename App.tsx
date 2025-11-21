@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { SoftShadows, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { PointOfInterest, GameState } from './types';
+import { PointOfInterest, GameState, RemotePlayer as RemotePlayerType } from './types';
 import { COLORS } from './constants';
 import { generateLore, generateLandmarkName } from './services/geminiService';
 import { PlayerController, Controls } from './components/Player';
@@ -96,44 +96,52 @@ const App: React.FC = () => {
   }, []);
 
   const handleInteract = useCallback(async () => {
-    setGameState(current => {
-        const poi = current.nearbyPoi;
-        
-        // Interaction condition: Must be nearby AND looking at the object
-        // Exception: If the lore box is already open, pressing E usually closes it, handled by UIOverlay.
-        // But for triggering NEW interaction, we need focus.
-        if (!poi) return current;
-        if (hoveredPoiId !== poi.id) return current;
+    const poi = gameState.nearbyPoi;
 
-        // If already discovered, just toggle the UI visibility
-        if (poi.isDiscovered) {
-            setShowLore(prev => !prev);
-            return current;
-        }
+    // Interaction condition: Must be nearby AND looking at the object
+    // Exception: If the lore box is already open, pressing E usually closes it, handled by UIOverlay.
+    // But for triggering NEW interaction, we need focus.
+    if (!poi) return;
+    if (hoveredPoiId !== poi.id) return;
 
-        // If currently generating, ignore
-        if (current.isGeneratingLore) return current;
+    // If already discovered, just toggle the UI visibility
+    if (poi.isDiscovered) {
+        setShowLore(prev => !prev);
+        return;
+    }
 
-        // Start Generation
-        generateLore(poi.name, poi.type).then(description => {
-             setGameState(prev => {
-                const updatedPois = prev.pois.map(p => 
-                    p.id === poi.id ? { ...p, description, isDiscovered: true } : p
-                );
-                // Auto-show lore once generated
-                setShowLore(true);
-                return {
-                    ...prev,
-                    pois: updatedPois,
-                    nearbyPoi: { ...poi, description, isDiscovered: true },
-                    isGeneratingLore: false,
-                };
-            });
+    // If currently generating, ignore
+    if (gameState.isGeneratingLore) return;
+
+    // Set generating state
+    setGameState(prev => ({ ...prev, isGeneratingLore: true }));
+
+    // Start Generation
+    generateLore(poi.name, poi.type).then(description => {
+            // Fix: Side effects (setShowLore) should not be inside the setGameState updater
+            setShowLore(true);
+
+            setGameState(prev => {
+            const updatedPois = prev.pois.map(p => 
+                p.id === poi.id ? { ...p, description, isDiscovered: true } : p
+            );
+            
+            // Update nearbyPoi if it is still the same one
+            const updatedNearby = prev.nearbyPoi?.id === poi.id 
+                ? { ...prev.nearbyPoi, description, isDiscovered: true } 
+                : prev.nearbyPoi;
+
+            return {
+                ...prev,
+                pois: updatedPois,
+                nearbyPoi: updatedNearby,
+                isGeneratingLore: false,
+            };
         });
-
-        return { ...current, isGeneratingLore: true };
+    }).catch(() => {
+         setGameState(prev => ({ ...prev, isGeneratingLore: false }));
     });
-  }, [hoveredPoiId]);
+  }, [gameState, hoveredPoiId]);
 
   return (
     <div className="w-full h-screen bg-gray-900 font-sans selection:bg-cyan-500 selection:text-white">
@@ -155,7 +163,7 @@ const App: React.FC = () => {
               <Terrain />
               <WorldObjects pois={gameState.pois} />
               
-              {Object.values(otherPlayers).map(player => (
+              {(Object.values(otherPlayers || {}) as RemotePlayerType[]).map((player: RemotePlayerType) => (
                 <RemotePlayer key={player.id} data={player} />
               ))}
 

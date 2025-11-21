@@ -53,7 +53,8 @@ export const generateLandmarkName = async (type: string): Promise<string> => {
       contents: prompt,
       config: {
         temperature: 1.0,
-        maxOutputTokens: 20,
+        // Removing maxOutputTokens to avoid requirement for thinkingConfig
+        // The prompt already asks for "ONLY the name"
       }
     });
 

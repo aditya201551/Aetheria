@@ -1,5 +1,5 @@
 
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useLayoutEffect } from 'react';
 import * as THREE from 'three';
 import { Float } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
@@ -23,14 +23,16 @@ const getTerrainHeight = (x: number, z: number) => {
 
 // --- 2. Terrain Component ---
 export const Terrain: React.FC = () => {
-  const meshRef = useRef<THREE.Mesh>(null);
+  const geoRef = useRef<THREE.PlaneGeometry>(null);
 
-  const { geometry, colors } = useMemo(() => {
-    // Increased segments to 256 for smoother slope interaction and less visual popping
-    const geom = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 256, 256);
-    const pos = geom.attributes.position;
+  useLayoutEffect(() => {
+    if (!geoRef.current) return;
+    const geo = geoRef.current;
+    const pos = geo.attributes.position;
     const count = pos.count;
-    const colorsArr = [];
+    
+    // Create colors buffer
+    const colorsArr = new Float32Array(count * 3);
     
     for (let i = 0; i < count; i++) {
       const x = pos.getX(i);
@@ -40,34 +42,36 @@ export const Terrain: React.FC = () => {
       pos.setZ(i, h);
       
       // Adjusted color thresholds for lower terrain profile
+      let r, g, b;
       if (h > 2.2) {
-        colorsArr.push(0.85, 0.9, 1.0); // Snow/Ice peaks
+        r = 0.85; g = 0.9; b = 1.0; // Snow/Ice peaks
       } else if (h > 0.8) {
-        colorsArr.push(0.3, 0.35, 0.4); // High rocky mountain side
+        r = 0.3; g = 0.35; b = 0.4; // High rocky mountain side
       } else if (h < -1.2) {
-        colorsArr.push(0.05, 0.02, 0.1); // Deep mystical valley floor
+        r = 0.05; g = 0.02; b = 0.1; // Deep mystical valley floor
       } else {
         // Dark mossy green with purple undertones for mid-levels
         const noise = Math.random() * 0.05;
-        colorsArr.push(0.1 + noise, 0.18 + noise, 0.13 + noise); 
+        r = 0.1 + noise; g = 0.18 + noise; b = 0.13 + noise;
       }
+      colorsArr[i * 3] = r;
+      colorsArr[i * 3 + 1] = g;
+      colorsArr[i * 3 + 2] = b;
     }
     
-    geom.computeVertexNormals();
-    const colorAttr = new THREE.Float32BufferAttribute(colorsArr, 3);
-    geom.setAttribute('color', colorAttr);
-
-    return { geometry: geom, colors: colorAttr };
+    geo.computeVertexNormals();
+    geo.setAttribute('color', new THREE.BufferAttribute(colorsArr, 3));
+    geo.attributes.position.needsUpdate = true;
+    geo.attributes.color.needsUpdate = true;
   }, []);
 
   return (
     <mesh 
-      ref={meshRef} 
       name="terrain"
       rotation={[-Math.PI / 2, 0, 0]} 
       receiveShadow
     >
-      <primitive object={geometry} />
+      <planeGeometry ref={geoRef} args={[WORLD_SIZE, WORLD_SIZE, 256, 256]} />
       <meshStandardMaterial 
         vertexColors 
         flatShading 

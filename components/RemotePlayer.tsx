@@ -1,4 +1,5 @@
-import React, { useRef } from 'react';
+
+import React, { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RemotePlayer as RemotePlayerType } from '../types';
 import * as THREE from 'three';
@@ -9,9 +10,11 @@ export const RemotePlayer: React.FC<{ data: RemotePlayerType }> = ({ data }) => 
   const targetPos = useRef(new THREE.Vector3(...data.position));
   const targetRot = useRef(data.rotation);
 
-  // Update targets immediately when data changes
-  targetPos.current.set(...data.position);
-  targetRot.current = data.rotation;
+  // Update targets when data changes - using useEffect to avoid side-effects during render
+  useEffect(() => {
+    targetPos.current.set(...data.position);
+    targetRot.current = data.rotation;
+  }, [data.position, data.rotation]);
 
   useFrame((state, delta) => {
     if (ref.current) {
